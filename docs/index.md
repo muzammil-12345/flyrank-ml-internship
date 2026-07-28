@@ -1,12 +1,12 @@
 # Refresh or Retire: What Actually Predicts Content Decay
 
-**Muzammil Zulfiqar** — FlyRank ML Internship Capstone, Search Intelligence Track
+**Muzammil Zulfiqar** (FlyRank ML Internship Capstone, Search Intelligence Track)
 
 ---
 
 ## Abstract
 
-Content teams need a repeatable way to decide which pages deserve a refresh before traffic disappears entirely. This project builds and validates a scoring model for that decision using the FlyRank internship warehouse, roughly 520,000 content records across 84 clients. A page is labeled a refresh candidate when its clicks dropped more than 20 percent between two recent windows and the page is older than 90 days. After catching and removing a leakage issue where the label's own inputs were also used as model features, three models (Logistic Regression, Decision Tree, Random Forest) were trained on content attributes that were never used to build the label. The Decision Tree reached a Precision at 50 of 0.66, and a follow up test showed that nearly all of that predictive power comes from a single signal, whether a page received any search visibility at all in the last 90 days, while attributes like word count, backlinks, and keyword competition carried almost no independent signal on their own.
+Content teams need a repeatable way to decide which pages deserve a refresh before traffic disappears entirely. This project builds and validates a scoring model for that decision using the FlyRank internship warehouse, roughly 520,000 content records across 84 clients. A page is labeled a refresh candidate when its clicks dropped more than 20 percent between two recent windows and the page is older than 90 days. After catching and removing a leakage issue where the label's own inputs were also used as model features, three models (Logistic Regression, Decision Tree, Random Forest) were trained on content attributes that were never used to build the label. Random Forest reached a Precision at 50 of 0.62, well ahead of Logistic Regression and Decision Tree, which both scored 0.50. A follow up test showed that nearly all of that predictive power traces back to a single signal, whether a page received any search visibility at all in the last 90 days, while attributes like word count, backlinks, and keyword competition carried almost no independent signal on their own.
 
 ## Introduction
 
@@ -20,7 +20,7 @@ This project uses the FlyRank internship warehouse release `v20260703`, specific
 
 **Label definition.** A page is marked `needs_refresh = 1` when its click trend between the last 30 day and prior 30 day windows dropped more than 20 percent, and the page is older than 90 days. The age gate exists so that pages too new to have earned traffic yet are not mistakenly flagged. Roughly 3 percent of pages met this bar (15,576 out of 519,606), which is a realistic base rate for this kind of problem.
 
-**Leakage check, and what it caught.** The first modeling pass included the trend percentage and content age directly as model features, the same values used to build the label. Every model, and even the simple baseline rule, scored a Precision at 50 of exactly 1.00. That is not a good result, it means the model was just restating its own label definition rather than learning anything. The fix was to drop the trend and age derived columns from the feature set entirely, and add genuinely independent signals instead, search demand, keyword competition, backlink count, word count, and search performance metrics (impressions, click through rate, average position) that were never used to construct the label.
+**Leakage check, and what it caught.** The first modeling pass included the trend percentage and content age directly as model features, the same values used to build the label. Every model, and even the simple baseline rule, scored a Precision at 50 of exactly 1.00. That is not a good result, it means the model was just restating its own label definition rather than learning anything. The fix was to drop the trend and age derived columns from the feature set entirely, and add genuinely independent signals instead: search demand, keyword competition, backlink count, word count, and search performance metrics (impressions, click through rate, average position) that were never used to construct the label.
 
 **Baseline.** A transparent hand written rule scores each page using its traffic trend and age, weighted 70/30. This baseline is kept in the results only as a sanity check that the label and scoring direction agree, since it still uses the same trend value the label is built from, it is not a fair comparison for the model.
 
@@ -34,12 +34,18 @@ This project uses the FlyRank internship warehouse release `v20260703`, specific
 |---|---|---|
 | Baseline (trend rule) | 1.00 | Uses the same signal as the label, not a fair comparison |
 | Logistic Regression | 0.50 | Independent content and search signals only |
-| Decision Tree | **0.66** | Independent content and search signals only |
-| Random Forest | 0.60 | Independent content and search signals only |
+| Decision Tree | 0.50 | Independent content and search signals only |
+| Random Forest | **0.62** | Independent content and search signals only |
 
-The Decision Tree was the strongest honest model. Looking at its feature importances, one signal, 90 day click through rate, accounted for over 99 percent of the model's decisions. A closer look showed why, 92 percent of pages had zero or missing CTR in the 90 day window, so the model was really learning a near binary split, did this page get any search visibility at all in the last 90 days, rather than a fine grained CTR score.
+![Model Precision@50 comparison, independent signals only](images/precision_comparison.png)
+*Random Forest is the strongest honest model on this split, roughly 2.5x the label's base rate of 3 percent.*
 
-A follow up test isolated that signal directly, replacing continuous CTR with an explicit `has_90d_visibility` flag alongside the remaining content attributes. Precision at 50 dropped slightly (0.48 for the Decision Tree, 0.54 for Random Forest), and the visibility flag alone still accounted for over 99.9 percent of the model's decision weight. Search demand, competition, backlinks, and word count each individually contributed less than 0.02 percent of the importance, even after the dominant signal was isolated on its own.
+Random Forest was the strongest honest model, reaching a Precision at 50 of 0.62 against a base rate of about 3 percent. To understand why, a follow up Decision Tree was fit on an adjusted feature set that replaced continuous click through rate with an explicit `has_90d_visibility` flag. Its feature importances showed that one signal, whether a page had any search visibility at all in the last 90 days, accounted for over 99.9 percent of the model's decisions.
+
+![Feature importance once visibility is isolated as its own flag](images/feature_importance.png)
+*Visibility alone accounts for essentially all of the signal; content attributes contribute almost nothing on their own.*
+
+This lines up with a separate observation in the data: 92 percent of pages had zero or missing click through rate in the 90 day window, so the models were really learning a near binary split, did this page get any search visibility at all, rather than a fine grained score. Search demand, competition, backlinks, and word count each individually contributed less than 0.02 percent of the importance in this isolated view.
 
 ## Limitations and Honest Framing
 
@@ -54,7 +60,7 @@ These findings are directional and decision support only, not causal claims abou
 
 ## Reproducibility
 
-All notebooks, including the weekly assignment notebooks and the capstone feature engineering and modeling notebook, are in the `work/` and `notebooks/` folders of the project repository. The exact deployed URL for this paper is recorded in `submission/paper_url.txt` at the repository root, per the capstone submission format.
+All notebooks, including the weekly assignment notebooks and the capstone feature engineering and modeling notebook, are in the `work/` and `notebooks/` folders of the project repository. Random Forest and Decision Tree models use a fixed random seed (`random_state=42`), so the reported numbers reproduce exactly on a fresh run. The exact deployed URL for this paper is recorded in `submission/paper_url.txt` at the repository root, per the capstone submission format.
 
 Repository: [github.com/muzammil-12345/flyrank-ml-internship](https://github.com/muzammil-12345/flyrank-ml-internship)
 
